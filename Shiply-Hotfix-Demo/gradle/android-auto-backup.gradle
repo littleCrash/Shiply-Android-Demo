@@ -1,0 +1,87 @@
+// 是否有Flavors
+def hasFlavors = project.android.productFlavors.size() > 0
+
+// 自动备份的路径
+def autoBackPath = file("${projectDir}/autoBackup/")
+
+// 是否使用自动备份
+def autoBackEnable = true
+if (!autoBackEnable) {
+    return
+}
+
+/**
+ * 自动备份编译生成的APK和Mapping文件
+ */
+android.applicationVariants.all { variant ->
+    def variantName = variant.name
+    def capitalizedVariantName = variantName.capitalize()
+
+    def assembleTask = tasks.findByName("assemble${capitalizedVariantName}")
+    if (assembleTask != null) {
+        assembleTask.doLast {
+            copy {
+                def date = new Date().format("MMddHHmmss")
+                def fileNamePrefix = "${project.name}-${variant.baseName}-${date}"
+                def destPath = autoBackPath
+
+                // 拷贝Apk
+                variant.outputs.forEach { output ->
+                    from output.outputFile
+                    into destPath
+                    rename { String fileName ->
+                        def outputName = output.dirName
+                        if (outputName.endsWith("/")) {
+                            outputName = outputName.substring(0, outputName.length() - 1)
+                        }
+
+                        if (!outputName.isEmpty()) {
+                            def oldFileName = "${project.name}-${outputName}-${variant.baseName}"
+                            def newFileName = "${fileNamePrefix}-${outputName}"
+                            fileName.replace(oldFileName, newFileName)
+                        } else {
+                            def oldFileName = "${project.name}-${variant.baseName}"
+                            def newFileName = "${fileNamePrefix}"
+                            fileName.replace(oldFileName, newFileName)
+                        }
+                    }
+                }
+
+                from variant.outputs.first().outputFile
+                into destPath
+                rename { String fileName ->
+                    def oldFileName = "${project.name}-${variant.baseName}"
+                    fileName.replace("${oldFileName}.apk", "${fileNamePrefix}.apk")
+                }
+
+                def dirName = variant.dirName
+                if (hasFlavors) {
+                    dirName = variantName
+                }
+
+                // 拷贝mapping.txt
+                from "${buildDir}/outputs/mapping/${dirName}/mapping.txt"
+                into destPath
+                rename { String fileName ->
+                    fileName.replace("mapping.txt", "${fileNamePrefix}-mapping.txt")
+                }
+
+                // 拷贝R.txt
+                from "${buildDir}/intermediates/symbols/${dirName}/R.txt"
+                from "${buildDir}/intermediates/symbol_list/${dirName}/R.txt"
+                from "${buildDir}/intermediates/runtime_symbol_list/${dirName}/R.txt"
+                into destPath
+                rename { String fileName ->
+                    fileName.replace("R.txt", "${fileNamePrefix}-R.txt")
+                }
+
+                // 拷贝methodIds.txt
+                from "${buildDir}/redirect/methodIds.txt"
+                into destPath
+                rename { String fileName ->
+                    fileName.replace("methodIds.txt", "${fileNamePrefix}-methodIds.txt")
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,91 @@
+apply plugin: 'com.tencent.rfix'
+
+repositories {
+    // 接入RFix补丁组件
+    jcenter()
+    maven { url "https://tencent-tds-maven.pkg.coding.net/repository/shiply/repo/" }
+    maven { url "https://tencent-tds-maven.pkg.coding.net/repository/shiply/repo-snapshot/" }
+}
+
+dependencies {
+    // 接入RFix补丁组件
+    compileOnly "com.tencent.rfix:RFix-android-anno:${RFIX_VERSION}"
+    implementation "com.tencent.rfix:RFix-android-lib:${RFIX_VERSION}"
+    annotationProcessor "com.tencent.rfix:RFix-android-anno:${RFIX_VERSION}"
+}
+
+RFixPatch {
+    // 补丁类型：Disable/Tinker
+    patchType = getPatchType('Tinker')
+
+    // 多架构独立打包时需要同时输入多组Apk
+    def multiArch = getMultiArch(false)
+    if (!multiArch) {
+        // 单架构打包
+        oldApk = "${projectDir.absolutePath}/RFix/old.apk"
+        newApk = "${projectDir.absolutePath}/RFix/new.apk"
+    } else {
+        // 多架构打包
+        oldApks = ["${projectDir.absolutePath}/RFix/old.apk",
+                   "${projectDir.absolutePath}/RFix/old64.apk"]
+        newApks = ["${projectDir.absolutePath}/RFix/new.apk",
+                   "${projectDir.absolutePath}/RFix/new64.apk"]
+    }
+
+    outputFolder = "${projectDir.absolutePath}/RFix/"
+
+    buildConfig {
+        // 补丁唯一ID，用于识别补丁和版本是否匹配
+        patchId = new Date().format("MMddHHmmss")
+
+        // 配置代码混淆和资源ID的映射规则（修复包构建是需要配置）
+        applyMapping = "${projectDir.absolutePath}/RFix/old_mapping.txt"
+        applyResourceMapping = "${projectDir.absolutePath}/RFix/old_R.txt"
+
+        // 使用splits实现多架构编译时需要开启该功能，以确保每个Apk的PatchId不同
+        appendOutputNameToPatchId = true
+
+        // 开启多架构补丁包独立打包功能
+        enablePackageSeparate = false
+
+        // 应用是否开启了加固
+        isProtectedApp = false
+    }
+
+    sevenZip {
+        // 使用本地环境的7z，解决M1编译问题
+        path = "7za"
+    }
+
+    // 自动化验证相关的配置
+    autoVerifyConfig {
+        // 验证用例类型：None/Base/Patch
+        verifyCase = getVerifyCase('None')
+    }
+}
+
+/**
+ * 获取补丁包的类型
+ * - 优先使用属性，如果不存在则使用默认值
+ * - 用于通过参数来控制补丁编译类型
+ */
+def getPatchType(defaultPatchType) {
+    if (!hasProperty('RFIX_PATCH_TYPE')) {
+        return defaultPatchType
+    }
+    return getProperty("RFIX_PATCH_TYPE")
+}
+
+def getMultiArch(defaultMultiArch) {
+    if (!hasProperty('RFIX_MULTI_ARCH')) {
+        return defaultMultiArch
+    }
+    return getProperty("RFIX_MULTI_ARCH")
+}
+
+def getVerifyCase(defaultVerifyCase) {
+    if (!hasProperty('RFIX_VERIFY_CASE')) {
+        return defaultVerifyCase
+    }
+    return getProperty("RFIX_VERIFY_CASE")
+}
